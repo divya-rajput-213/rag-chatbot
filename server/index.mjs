@@ -35,41 +35,70 @@ app.use(express.json()); // Parse JSON bodies
 
 let retriever = null; // This will store your vector retriever
 
+// Retry helper function with exponential backoff for 429 errors
+async function invokeWithRetry(model, messages, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await model.invoke(messages);
+    } catch (err) {
+      if (err.statusCode === 429) {
+        const waitTime = (2 ** i) * 1000; // 1s, 2s, 4s backoff
+        console.warn(`429 Too Many Requests. Retrying after ${waitTime}ms... (Attempt ${i + 1} of ${retries})`);
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+      } else {
+        throw err; // rethrow other errors
+      }
+    }
+  }
+  throw new Error('Max retries reached due to repeated 429 errors.');
+}
+
 // POST /upload - Accept a PDF file, process it, and prepare for question-answering
-app.post('/upload', upload.single('file'), async (req, res) => {
+app.post('/upload', upload.array('files'), async (req, res) => {
   try {
-    console.log("🟡 Upload received:", req.file);
+    const files = req.files;
+    if (!files || files.length === 0) {
+      return res.status(400).send({ error: 'No files uploaded.' });
+    }
 
-    // Load and parse the uploaded PDF
-    const loader = new PDFLoader(req.file.path);
-    const docs = await loader.load();
-    console.log("📄 PDF loaded. Pages:", docs.length);
+    console.log(`🟡 ${files.length} files uploaded`);
 
-    // Split the loaded documents into chunks
-const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 800, chunkOverlap: 50 });
-    const splitDocs = await splitter.splitDocuments(docs);
+    const allDocs = [];
+
+    for (const file of files) {
+      console.log("📄 Processing file:", file.originalname);
+
+      const loader = new PDFLoader(file.path);
+      const docs = await loader.load();
+      allDocs.push(...docs);
+
+      // Delete file after processing
+      fs.unlinkSync(file.path);
+    }
+
+    console.log("📄 Total pages loaded:", allDocs.length);
+
+    const splitter = new RecursiveCharacterTextSplitter({ chunkSize: 800, chunkOverlap: 50 });
+    const splitDocs = await splitter.splitDocuments(allDocs);
+
     console.log("✂️ Documents split into chunks:", splitDocs.length);
 
-    // Create embeddings using GoogleGenerativeAI
     const embeddings = new GoogleGenerativeAIEmbeddings({
       model: "text-embedding-004",
       apiKey: process.env.GOOGLE_API_KEY,
     });
 
-    // Store the split documents into an in-memory vector store
     const vectorStore = await MemoryVectorStore.fromDocuments(splitDocs, embeddings);
-    retriever = vectorStore.asRetriever(); // Store retriever globally
+    retriever = vectorStore.asRetriever();
+
     console.log("📦 Embeddings and vector store created successfully");
-
-    // Delete the uploaded file after processing
-    fs.unlinkSync(req.file.path);
-
-    res.send({ message: '✅ PDF uploaded and processed.' });
+    res.send({ message: '✅ PDFs uploaded and processed.' });
   } catch (err) {
     console.error("❌ Error during PDF upload processing:", err);
     res.status(500).send({ error: err.message });
   }
 });
+
 
 // POST /query - Accept a question and return an answer based on uploaded PDF
 app.post('/query', async (req, res) => {
@@ -96,12 +125,12 @@ app.post('/query', async (req, res) => {
     // Initialize the model
     const model = new ChatGoogleGenerativeAI({
       apiKey: process.env.GOOGLE_API_KEY,
-      model: 'gemini-1.5-pro',
+      model: 'gemini-2.0-flash',
       temperature: 0,
     });
 
-    // Ask the question based on context
-    const response = await model.invoke([
+    // Use retry helper to invoke the model with exponential backoff on 429
+    const response = await invokeWithRetry(model, [
       { role: 'system', content: 'You are a helpful assistant. Answer the question based on the context from the uploaded PDF.' },
       { role: 'user', content: `Context:\n${context}\n\nQuestion: ${question}` },
     ]);
@@ -114,7 +143,6 @@ app.post('/query', async (req, res) => {
     res.status(500).send({ error: err.message });
   }
 });
-
 
 // Start server
 app.listen(5000, () => console.log('🚀 Server running on http://localhost:5000'));

@@ -1,67 +1,91 @@
-import React, { useState } from 'react';
-import { Container, CssBaseline, Typography } from '@mui/material';
-import axios from 'axios';
-import FileUpload from './components/FileUpload';
-import ChatWindow from './components/ChatWindow';
-import QuestionInput from './components/QuestionInput';
+import React, { useState } from "react";
+import { CssBaseline, Typography, CircularProgress } from "@mui/material";
+import axios from "axios";
+import FileUpload from "./components/FileUpload";
+import ChatWindow from "./components/ChatWindow";
+import QuestionInput from "./components/QuestionInput";
+import "./App.css"; // import the CSS here
 
-
-function App() {
-  const [file, setFile] = useState(null);
-  const [question, setQuestion] = useState('');
+export default function App() {
+  const [files, setFiles] = useState([]);
+  const [question, setQuestion] = useState("");
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!files.length) return;
+
     const formData = new FormData();
-    formData.append('file', file);
+    files.forEach((file) => formData.append("files", file));
+
     try {
-      const res = await axios.post('http://localhost:5000/upload', formData);
+      const res = await axios.post("http://localhost:5000/upload", formData);
       alert(res.data.message);
     } catch {
-      alert('Upload failed');
+      alert("Upload failed");
     }
   };
 
   const handleQuery = async () => {
     if (!question.trim()) return;
-    setChat((prev) => [...prev, { type: 'user', text: question }]);
+    setChat((prev) => [...prev, { type: "user", text: question }]);
     setLoading(true);
 
     try {
-      const res = await axios.post('http://localhost:5000/query', { question });
-      const botAnswer = res.data.answer || 'Sorry, no answer found.';
-      setChat((prev) => [...prev, { type: 'bot', text: botAnswer }]);
+      const res = await axios.post("http://localhost:5000/query", { question });
+      const botAnswer = res.data.answer || "Sorry, no answer found.";
+      setChat((prev) => [...prev, { type: "bot", text: botAnswer }]);
     } catch {
-      setChat((prev) => [...prev, { type: 'bot', text: 'Error: Could not get answer.' }]);
+      setChat((prev) => [
+        ...prev,
+        { type: "bot", text: "Error: Could not get answer." },
+      ]);
     }
 
     setLoading(false);
-    setQuestion('');
+    setQuestion("");
   };
 
   return (
     <>
       <CssBaseline />
-      <Container maxWidth="sm" sx={{ mt: 4, mb: 4 }}>
-        <Typography variant="h4" gutterBottom align="center">
-          📄 PDF Chatbot (RAG with Gemini)
-        </Typography>
+      <div className="appContainer">
+        {/* Left side - File Upload */}
+        <div className="uploadSection">
+          <Typography variant="h4" className="title">
+            Upload PDFs
+          </Typography>
+          <FileUpload
+            files={files}
+            setFiles={setFiles}
+            handleUpload={handleUpload}
+          />
+        </div>
 
-        <FileUpload file={file} setFile={setFile} handleUpload={handleUpload} />
+        {/* Right side - Chat */}
+        <div className="chatSection">
+          <Typography variant="h4" className="title">
+            Ask Questions
+          </Typography>
 
-        <ChatWindow chat={chat} loading={loading} />
+          {/* <div className="chatWindowWrapper"> */}
+            <ChatWindow chat={chat} loading={loading} />
+          {/* </div> */}
 
-        <QuestionInput
-          question={question}
-          setQuestion={setQuestion}
-          handleQuery={handleQuery}
-          loading={loading}
-        />
-      </Container>
+          <QuestionInput
+            question={question}
+            setQuestion={setQuestion}
+            handleQuery={handleQuery}
+            loading={loading}
+          />
+
+          {loading && (
+            <div className="loadingSpinner">
+              <CircularProgress color="primary" size={30} />
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }
-
-export default App;
