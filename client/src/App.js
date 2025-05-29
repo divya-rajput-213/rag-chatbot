@@ -80,12 +80,6 @@ export default function App() {
             handleQuery={handleQuery}
             loading={loading}
           />
-
-          {loading && (
-            <div className="loadingSpinner">
-              <CircularProgress color="primary" size={30} />
-            </div>
-          )}
         </div>
       </div>
     </>
