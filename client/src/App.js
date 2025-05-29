@@ -12,6 +12,8 @@ export default function App() {
   const [chat, setChat] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+
   const handleUpload = async () => {
     if (!files.length) return;
 
@@ -19,7 +21,7 @@ export default function App() {
     files.forEach((file) => formData.append("files", file));
 
     try {
-      const res = await axios.post("http://localhost:5000/upload", formData);
+      const res = await axios.post(`${API_BASE_URL}/upload`, formData);
       alert(res.data.message);
     } catch {
       alert("Upload failed");
@@ -32,7 +34,7 @@ export default function App() {
     setLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:5000/query", { question });
+      const res = await axios.post(`${API_BASE_URL}/query`, { question });
       const botAnswer = res.data.answer || "Sorry, no answer found.";
       setChat((prev) => [...prev, { type: "bot", text: botAnswer }]);
     } catch {
