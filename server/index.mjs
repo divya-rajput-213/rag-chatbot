@@ -6,6 +6,7 @@ import express from 'express'; // Web framework for Node.js
 import multer from 'multer'; // Middleware for handling file uploads
 import cors from 'cors'; // Enable Cross-Origin Resource Sharing
 import fs from 'fs'; // File system module
+import path from 'path';
 
 // Import LangChain modules
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf'; // To load and parse PDF files
@@ -16,10 +17,16 @@ import { MemoryVectorStore } from 'langchain/vectorstores/memory'; // In-memory 
 // Initialize express app
 const app = express();
 
-// Configure multer to store uploaded files in 'uploads/' folder
+// Create uploads folder if missing
+const uploadDir = path.join(process.cwd(), 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+  console.log('Created uploads directory');
+}
+// Multer config
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    cb(null, uploadDir);
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -27,7 +34,7 @@ const storage = multer.diskStorage({
   },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({ storage });
 
 // Middlewares
 app.use(cors()); // Allow requests from any origin
